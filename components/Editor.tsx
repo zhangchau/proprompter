@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { TeleprompterSettings, FontSize } from '../types';
 
@@ -16,19 +17,20 @@ const Editor: React.FC<EditorProps> = ({ settings, onUpdate, onStart }) => {
   const [touchCurrentY, setTouchCurrentY] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
 
-  // Map settings.fontSize to Tailwind text size classes for the editor textarea
-  const fontSizeClasses = {
-    small: 'text-base',
-    medium: 'text-xl',
-    large: 'text-3xl'
+  // Define exact font configurations (Must match CanvasRenderer)
+  // small: ~text-lg/text-xl, medium: ~text-2xl/3xl, large: ~text-4xl/5xl
+  const fontConfig = {
+    small: { fontSize: '24px', lineHeight: '36px' },
+    medium: { fontSize: '32px', lineHeight: '48px' },
+    large: { fontSize: '48px', lineHeight: '72px' }
   };
 
-  // 焦点框高度根据字体大小动态调整
-  const focusLineHeights = {
-    small: 'h-10',    // 40px - 适配小字体
-    medium: 'h-14',   // 56px - 适配中字体
-    large: 'h-20'     // 80px - 适配大字体
-  };
+  const currentFont = fontConfig[settings.fontSize];
+
+  // 焦点框样式
+  // Height must match lineHeight
+  // Position must be synchronized with textarea padding
+  const focusLineTop = '60px'; // Initial Focus Position
 
   // 触摸事件处理
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -46,13 +48,11 @@ const Editor: React.FC<EditorProps> = ({ settings, onUpdate, onStart }) => {
     if (!isSwiping) return;
 
     const deltaY = touchCurrentY - touchStartY;
-    const threshold = 50; // 滑动阈值（50px
+    const threshold = 50;
 
     if (deltaY > threshold) {
-      // 向下划 → 收起
       setIsControlPanelExpanded(false);
     } else if (deltaY < -threshold) {
-      // 向上划 → 展开
       setIsControlPanelExpanded(true);
     }
 
@@ -63,9 +63,9 @@ const Editor: React.FC<EditorProps> = ({ settings, onUpdate, onStart }) => {
 
   return (
     <div className="flex flex-col h-full relative bg-[#0a1118]">
-      {/* Header - 压缩高度 */}
-      <header className="flex items-center justify-between px-6 py-3 pt-8 border-b border-white/5 shrink-0">
-        <div className="w-14"></div> {/* Balanced spacer */}
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-3 pt-8 border-b border-white/5 shrink-0 z-20 bg-[#0a1118]">
+        <div className="w-14"></div>
         <h1 className="text-sm font-bold text-white/90 tracking-wide">提词器</h1>
         <button
           onClick={() => onUpdate({ script: '' })}
@@ -77,37 +77,54 @@ const Editor: React.FC<EditorProps> = ({ settings, onUpdate, onStart }) => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
-        {/* Placeholder Label Area - 减小高度 */}
-        <div className="px-6 h-6 flex items-end">
+        {/* Placeholder Label Area */}
+        <div className="absolute top-[60px] left-6 right-6 pointer-events-none z-0">
           {settings.script.length === 0 && (
-            <label className="text-[11px] font-bold text-white/20 tracking-widest uppercase animate-in fade-in duration-300">
-              请输入你的内容
+            <label
+              className="text-[24px] font-bold text-white/20 tracking-wide uppercase animate-in fade-in duration-300"
+              style={{ lineHeight: '36px' }}
+            >
+              请输入/粘贴文案...
             </label>
           )}
         </div>
 
-        <div className="flex-1 px-6 pb-12 overflow-y-auto custom-scrollbar">
+        {/* Text Area */}
+        <div className="flex-1 px-6 pb-32 overflow-y-auto custom-scrollbar relative z-0">
           <textarea
-            className={`w-full h-full bg-transparent border-none focus:ring-0 font-medium leading-[1.8] text-white/90 placeholder:text-white/5 resize-none p-0 transition-all duration-200 ${fontSizeClasses[settings.fontSize]}`}
+            className="w-full h-full bg-transparent border-none focus:ring-0 font-bold text-white/90 placeholder:text-transparent resize-none p-0 transition-opacity duration-200"
+            style={{
+              fontSize: currentFont.fontSize,
+              lineHeight: currentFont.lineHeight,
+              paddingTop: focusLineTop, // Align first line to focus line
+              paddingBottom: '50vh' // Allow scrolling last line to top
+            }}
             placeholder=""
             value={settings.script}
             onChange={(e) => onUpdate({ script: e.target.value })}
+            spellCheck={false}
           />
         </div>
 
-        {/* Focus Area Highlight Frame: Synchronized style with TeleprompterOverlay */}
+        {/* Focus Area Highlight Frame - Positioned Absolutely */}
         {settings.showFocusLine && (
-          <div className={`absolute inset-x-0 top-[50px] ${focusLineHeights[settings.fontSize]} pointer-events-none z-10 transition-all duration-300 border-y border-primary/50 shadow-[0_0_20px_rgba(13,127,242,0.2)]`} />
+          <div
+            className="absolute inset-x-0 pointer-events-none z-10 transition-all duration-300 border-y border-primary/50 shadow-[0_0_20px_rgba(13,127,242,0.2)] bg-primary/5 backdrop-blur-[1px]"
+            style={{
+              top: focusLineTop,
+              height: currentFont.lineHeight
+            }}
+          />
         )}
 
-        <div className="absolute bottom-4 right-6 pointer-events-none">
-          <span className="text-[9px] text-white/20 font-bold tracking-widest uppercase">
+        <div className="absolute bottom-24 right-6 pointer-events-none z-10">
+          <span className="text-[9px] text-white/20 font-bold tracking-widest uppercase bg-black/50 px-2 py-1 rounded">
             {charCount} Characters
           </span>
         </div>
       </main>
 
-      {/* Control Panel (Drawer) - 支持收起/展开 */}
+      {/* Control Panel (Drawer) */}
       <section
         className="absolute bottom-0 left-0 right-0 bg-[#0d1621] border-t border-white/10 rounded-t-[2.5rem] shadow-[0_-20px_50px_rgba(0,0,0,0.5)] z-50 transition-transform duration-300 ease-out"
         style={{

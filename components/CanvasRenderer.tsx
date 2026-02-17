@@ -35,12 +35,12 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         getCanvas: () => canvasRef.current
     }));
 
-    // Font configurations
+    // Font configurations (MATCHES EDITOR)
     const getFontConfig = (size: 'small' | 'medium' | 'large') => {
         switch (size) {
-            case 'small': return { size: 24, lineHeight: 36 }; // ~text-lg
-            case 'medium': return { size: 32, lineHeight: 48 }; // ~text-2xl
-            case 'large': return { size: 48, lineHeight: 72 }; // ~text-4xl
+            case 'small': return { size: 24, lineHeight: 36 };
+            case 'medium': return { size: 32, lineHeight: 48 };
+            case 'large': return { size: 48, lineHeight: 72 };
             default: return { size: 32, lineHeight: 48 };
         }
     };
@@ -61,11 +61,13 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
 
         // Wrap text logic
         const lines: string[] = [];
-        const paragraphs = settings.script.split('\n');
+        // Convert newlines to paragraphs (preserve empty lines)
+        const paragraphs = settings.script.replace(/\r\n/g, "\n").split('\n');
 
         paragraphs.forEach(paragraph => {
-            if (paragraph.trim() === '') {
-                lines.push(''); // Empty line
+            // If empty line, push empty string
+            if (paragraph === '') {
+                lines.push('');
                 return;
             }
 
@@ -86,15 +88,13 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         });
 
         setRenderedLines(lines);
-        // Reset scroll when script changes?
-        // scrollPosRef.current = 0; 
     }, [settings.script, width, settings.fontSize]);
 
     // Main render loop
     const render = (time: number) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for non-transparent
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
 
         if (lastTimeRef.current === 0) {
@@ -104,35 +104,34 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         const deltaTime = time - lastTimeRef.current;
         lastTimeRef.current = time;
 
-        // Calculate max scroll
-        // Content starts at paddingY (35% height).
-        // We want to scroll until the LAST line is near the focus line (center) or top?
-        // Usually teleprompter scrolls until end.
-        // Total Text Height = lines.length * lineHeight
-        // If we want last line to reach top: Max Scroll = Total Height + Padding.
-        // Let's stop when the last line moves out of view? Or stops at center?
-        // Let's stop when end of content reaches middle (Focus Line).
-        // Start Y of first line = paddingY - scrollPos.
-        // Y of last line = paddingY - scrollPos + (lines.length-1)*lineHeight.
-        // We want last line to be at FocusY (roughly middle).
-        // height/2 = paddingY - scrollPos + (lines.length-1)*lineHeight
-        // scrollPos = paddingY + (lines.length-1)*lineHeight - height/2
+        // --- ALIGNMENT LOGIC ---
+        // Focus Line is at Center (height/2)
+        // We want the FIRST line (index 0) to start exactly centered in the Focus Line.
+        // Focus Line Top = height/2 - lineHeight/2
+        // So StartY (when scroll=0) = Focus Line Top.
+        // paddingY = height/2 - lineHeightPx/2
 
-        const paddingY = height * 0.35;
+        const paddingY = (height / 2) - (lineHeightPx / 2);
+
         const totalTextHeight = renderedLines.length * lineHeightPx;
-        // Allow scrolling until the end of text passes the view?
-        // Or just stop when the specific text ends.
-        // Let's play it safe and let it scroll past a bit.
-        const maxScroll = totalTextHeight + paddingY;
+        // Stop when the LAST line is centered.
+        // Last Line Y = startY + (lines-1)*LH
+        // We want Last Line Y = Focus Line Top
+        // paddingY - scroll + (lines-1)*LH = paddingY
+        // scroll = (lines-1)*LH
+        // So Max Scroll = (lines-1)*lineHeightPx
+        // Let's add a bit of buffer
+        const maxScroll = Math.max(0, (renderedLines.length - 1) * lineHeightPx);
 
-        // Calculate speed
-        const speedFactor = settings.speed * 0.5;
+        // Calculate speed (Scale factor tuning)
+        const speedFactor = settings.speed * 0.6; // Tuned for px/sec
 
         if (isPlaying) {
+            // Only scroll if content > 1 line? No, allow scrolling anyway
             const nextPos = scrollPosRef.current + speedFactor * (deltaTime / 1000);
             if (nextPos >= maxScroll) {
                 scrollPosRef.current = maxScroll;
-                if (onFinish) onFinish(); // Notify parent to stop playing
+                if (onFinish && isPlaying) onFinish();
             } else {
                 scrollPosRef.current = nextPos;
             }
@@ -163,8 +162,8 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         // Render logic
         renderedLines.forEach((line, index) => {
             const y = startY + (index * lineHeightPx);
-            // Draw only if visible (with buffer)
-            if (y + lineHeightPx > -100 && y < height + 100) {
+            // Optimize: Draw only if visible (with buffer)
+            if (y + lineHeightPx > -50 && y < height + 50) {
                 ctx.fillText(line, centerX, y);
             }
         });
@@ -173,20 +172,22 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
 
         // Draw Focus Line (Static UI)
         if (settings.showFocusLine) {
-            const focusY = height / 2 - (lineHeightPx / 2);
+            const focusYCenter = height / 2;
+            const focusTop = focusYCenter - (lineHeightPx / 2);
+            const focusBottom = focusYCenter + (lineHeightPx / 2);
 
             ctx.strokeStyle = 'rgba(13, 127, 242, 0.5)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(0, focusY);
-            ctx.lineTo(width, focusY);
-            ctx.moveTo(0, focusY + lineHeightPx);
-            ctx.lineTo(width, focusY + lineHeightPx);
+            ctx.moveTo(0, focusTop);
+            ctx.lineTo(width, focusTop);
+            ctx.moveTo(0, focusBottom);
+            ctx.lineTo(width, focusBottom);
             ctx.stroke();
 
             // Optional: shadow
             ctx.shadowColor = 'rgba(13, 127, 242, 0.2)';
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = 15;
         }
 
         // Loop
