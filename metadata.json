@@ -1,0 +1,7 @@
+{
+  "name": "ProPrompter - 智能提词器",
+  "description": "一款专业级移动端提词器应用，支持实时滚动速度调节、镜像模式、焦点区域提示及悬浮窗模拟，助力流畅视频创作。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
