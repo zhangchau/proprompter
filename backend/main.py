@@ -26,17 +26,20 @@ app = FastAPI(
     description="智能提词器后端服务"
 )
 
-# CORS 跨域配置，允许前端开发服务器访问
+# CORS 跨域配置
+# 开发环境：允许本地端口
+# 生产环境：允许所有来源（部署后可改为具体 Vercel 域名）
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    "*",  # 允许所有来源（生产环境部署后建议改为具体域名）
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # 生产环境暂时允许所有来源
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
