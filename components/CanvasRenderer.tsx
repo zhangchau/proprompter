@@ -59,29 +59,34 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
 
         const maxWidth = width * 0.8; // 80% width for padding
 
-        // Wrap text logic
+        // Improved Text Wrapping (Character-level for CJK support)
         const lines: string[] = [];
-        // Convert newlines to paragraphs (preserve empty lines)
         const paragraphs = settings.script.replace(/\r\n/g, "\n").split('\n');
 
         paragraphs.forEach(paragraph => {
-            // If empty line, push empty string
             if (paragraph === '') {
                 lines.push('');
                 return;
             }
 
-            const words = paragraph.split(' ');
-            let currentLine = words[0];
+            // Check if text likely contains CJK (no spaces)
+            // If it has spaces, use word wrapping. If not, use char wrapping.
+            // Hybrid approach: Split by characters, but respect words if possible?
+            // Simple robust approach for CJK: iterate characters.
 
-            for (let i = 1; i < words.length; i++) {
-                const word = words[i];
-                const width = ctx.measureText(currentLine + " " + word).width;
-                if (width < maxWidth) {
-                    currentLine += " " + word;
-                } else {
+            const chars = Array.from(paragraph); // Handles emojis correctly
+            let currentLine = '';
+
+            for (let i = 0; i < chars.length; i++) {
+                const char = chars[i];
+                const testLine = currentLine + char;
+                const metrics = ctx.measureText(testLine);
+
+                if (metrics.width > maxWidth && currentLine !== '') {
                     lines.push(currentLine);
-                    currentLine = word;
+                    currentLine = char;
+                } else {
+                    currentLine = testLine;
                 }
             }
             lines.push(currentLine);
@@ -105,29 +110,15 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         lastTimeRef.current = time;
 
         // --- ALIGNMENT LOGIC ---
-        // Focus Line is at Center (height/2)
-        // We want the FIRST line (index 0) to start exactly centered in the Focus Line.
-        // Focus Line Top = height/2 - lineHeight/2
-        // So StartY (when scroll=0) = Focus Line Top.
-        // paddingY = height/2 - lineHeightPx/2
-
+        // StartY such that the FIRST LINE is centered in the Focus Line.
         const paddingY = (height / 2) - (lineHeightPx / 2);
 
-        const totalTextHeight = renderedLines.length * lineHeightPx;
-        // Stop when the LAST line is centered.
-        // Last Line Y = startY + (lines-1)*LH
-        // We want Last Line Y = Focus Line Top
-        // paddingY - scroll + (lines-1)*LH = paddingY
-        // scroll = (lines-1)*LH
-        // So Max Scroll = (lines-1)*lineHeightPx
-        // Let's add a bit of buffer
         const maxScroll = Math.max(0, (renderedLines.length - 1) * lineHeightPx);
 
-        // Calculate speed (Scale factor tuning)
-        const speedFactor = settings.speed * 0.6; // Tuned for px/sec
+        // Calculate speed
+        const speedFactor = settings.speed * 0.6;
 
         if (isPlaying) {
-            // Only scroll if content > 1 line? No, allow scrolling anyway
             const nextPos = scrollPosRef.current + speedFactor * (deltaTime / 1000);
             if (nextPos >= maxScroll) {
                 scrollPosRef.current = maxScroll;
@@ -159,11 +150,11 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
         const startY = paddingY - scrollPosRef.current;
         const centerX = width / 2;
 
-        // Render logic
+        // Render Logic
         renderedLines.forEach((line, index) => {
             const y = startY + (index * lineHeightPx);
-            // Optimize: Draw only if visible (with buffer)
-            if (y + lineHeightPx > -50 && y < height + 50) {
+            // Draw only if visible (with generous buffer)
+            if (y + lineHeightPx > -100 && y < height + 100) {
                 ctx.fillText(line, centerX, y);
             }
         });
@@ -185,12 +176,10 @@ const CanvasRenderer = forwardRef<CanvasRendererHandle, CanvasRendererProps>(({
             ctx.lineTo(width, focusBottom);
             ctx.stroke();
 
-            // Optional: shadow
             ctx.shadowColor = 'rgba(13, 127, 242, 0.2)';
             ctx.shadowBlur = 15;
         }
 
-        // Loop
         requestRef.current = requestAnimationFrame(render);
     };
 
